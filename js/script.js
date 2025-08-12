@@ -1,3 +1,4 @@
+
 const canvas = document.createElement('canvas');
 canvas.id = 'limbo-bg';
 canvas.style.position = 'fixed';
@@ -9,10 +10,50 @@ canvas.style.zIndex = '-1';
 canvas.style.pointerEvents = 'auto';
 document.body.appendChild(canvas);
 
+const lightVsSource = `
+attribute vec2 aPos;
+varying vec2 vUv;
+void main() {
+	vUv = (aPos + 1.0) * 0.5;
+	gl_Position = vec4(aPos, 0.0, 1.0);
+}`;
+
+const lightFsSource = `
+precision mediump float;
+varying vec2 vUv;
+uniform float u_time;
+uniform float u_flicker;
+void main() {
+	vec2 lightCenter = vec2(0.92, 0.08);
+	lightCenter.y = 0.92;
+	float dist = distance(vUv, lightCenter);
+	float radius = 0.68 + 0.10 * sin(u_time * 0.7);
+	float edge = 0.36;
+	float intensity = smoothstep(radius, radius - edge, dist);
+	float flicker = 0.7 + 0.3 * u_flicker;
+	float alpha = intensity * flicker * 0.38;
+	gl_FragColor = vec4(1.0, 0.98, 0.85, alpha);
+}`;
+
+
+
+
+
 const gl = canvas.getContext('webgl');
 if (!gl) {
 	alert('WebGL not supported');
 }
+
+const lightProg = createProgram(gl, lightVsSource, lightFsSource);
+const lightQuadVBO = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, lightQuadVBO);
+
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+	-1, -1,
+	1, -1,
+	-1, 1,
+	1, 1
+]), gl.STATIC_DRAW);
 
 const vsSource = `
 attribute vec2 aPos;
@@ -319,7 +360,7 @@ const treeLayers = [
 		yBase: canvas.height - 30,
 		heightScale: 0.38,
 		thicknessScale: 0.7,
-		color: [0.65, 0.65, 0.68, 1.0],
+		color: [0.38, 0.38, 0.41, 1.0],
 		parallaxStrength: 0.001
 	},
 	{
@@ -327,7 +368,7 @@ const treeLayers = [
 		yBase: canvas.height - 20,
 		heightScale: 0.48,
 		thicknessScale: 1.25,
-		color: [0.32, 0.32, 0.36, 1.0],
+		color: [0.16, 0.16, 0.18, 1.0],
 		parallaxStrength: 0.003
 	},
 	{
@@ -512,15 +553,36 @@ function drawGrassLayer(params, vbo, color, time, parallaxStrength = 0) {
 		}
 }
 
+function drawFlickerLight(time) {
+
+	gl.enable(gl.BLEND);
+	gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+	gl.useProgram(lightProg);
+	gl.bindBuffer(gl.ARRAY_BUFFER, lightQuadVBO);
+	const aPos = gl.getAttribLocation(lightProg, 'aPos');
+	gl.enableVertexAttribArray(aPos);
+	gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+	let slow = Math.sin(time * 0.003 + Math.sin(time * 0.007));
+	let fast = Math.sin(time * 0.045 + Math.sin(time * 0.09));
+	let flicker = Math.abs(slow) * 0.7 + 0.3 * fast * Math.abs(slow);
+	flicker = Math.max(0.0, Math.min(1.0, flicker));
+	gl.uniform1f(gl.getUniformLocation(lightProg, 'u_time'), time * 0.001);
+	gl.uniform1f(gl.getUniformLocation(lightProg, 'u_flicker'), flicker);
+	gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+	gl.disable(gl.BLEND);
+}
+
 function drawScene(time = 0) {
 	gl.viewport(0, 0, canvas.width, canvas.height);
+	gl.clearColor(0.85, 0.85, 0.88, 1.0);
 	gl.clear(gl.COLOR_BUFFER_BIT);
+	drawFlickerLight(time);
 	updateTreeParallaxVBOs();
 	for (let i = 0; i < treeLayers.length; i++) {
 		drawTreeLayer(i);
 	}
-	drawGrassLayer(grassParamsLight, grassVBOLight, [0.22, 0.22, 0.26, 1.0], time * 0.001, 0.002);
-	drawGrassLayer(grassParamsMed, grassVBOMed, [0.18, 0.18, 0.20, 1.0], time * 0.001, 0.005);
+	drawGrassLayer(grassParamsLight, grassVBOLight, [0.12, 0.12, 0.15, 1.0], time * 0.001, 0.002);
+	drawGrassLayer(grassParamsMed, grassVBOMed, [0.08, 0.08, 0.10, 1.0], time * 0.001, 0.005);
 	gl.useProgram(prog);
 	gl.uniform4f(gl.getUniformLocation(prog, 'uColor'), 0, 0, 0, 1);
 	gl.bindBuffer(gl.ARRAY_BUFFER, barVBO);
