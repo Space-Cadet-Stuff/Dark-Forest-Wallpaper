@@ -322,7 +322,7 @@ function segmentToTriangles(segment, prevSegment = null) {
 	let startLeftY = startY + perpY;
 	let startRightX = startX - perpX;
 	let startRightY = startY - perpY;
-	
+
 	if (prevSegment) {
 		const prevDx = prevSegment.endX - prevSegment.startX;
 		const prevDy = prevSegment.endY - prevSegment.startY;
@@ -355,6 +355,33 @@ function segmentToTriangles(segment, prevSegment = null) {
 	return triangles;
 }
 
+function processTreeSegments(tree) {
+	const allSegments = [];
+	const segmentConnections = new Map();
+	
+	function collectSegments(node, parentEndSegment = null) {
+		for (let i = 0; i < node.segments.length; i++) {
+			const segment = node.segments[i];
+			segment.nodeId = Math.random();
+			allSegments.push(segment);
+			
+			if (i === 0 && parentEndSegment) {
+				segmentConnections.set(segment, parentEndSegment);
+			} else if (i > 0) {
+				segmentConnections.set(segment, node.segments[i - 1]);
+			}
+		}
+		
+		const lastTrunkSegment = node.segments[node.segments.length - 1];
+		for (const child of node.children) {
+			collectSegments(child, lastTrunkSegment);
+		}
+	}
+	
+	collectSegments(tree);
+	return { segments: allSegments, connections: segmentConnections };
+}
+
 function generateTreeRow(rowConfig, time, parallaxX) {
 	const { count, yBase, heightScale, thicknessScale, color, parallaxStrength } = rowConfig;
 	const canvasWidth = canvas.width;
@@ -362,6 +389,7 @@ function generateTreeRow(rowConfig, time, parallaxX) {
 	const verts = [];
 	const leafVerts = [];
 	const edgePad = 0.18;
+	
 	for (let i = 0; i < count; i++) {
 		const t = (i + 1) / (count + 1);
 		const minX = -edgePad * canvasWidth;
@@ -372,16 +400,18 @@ function generateTreeRow(rowConfig, time, parallaxX) {
 		const length = canvasHeight * heightScale * (0.7 + Math.random() * 0.3);
 		const thickness = 18 * thicknessScale * (0.7 + Math.random() * 0.5);
 		const depth = 3 + Math.floor(Math.random() * 2);
+		
 		const tree = new TreeNode(baseX, baseY, angle, length, thickness, depth, 0);
 		tree.grow();
-		const segments = tree.getAllSegments();
+		
+		const { segments, connections } = processTreeSegments(tree);
 
-		for (let j = 0; j < segments.length; j++) {
-			const seg = segments[j];
-			const prevSeg = j > 0 ? segments[j - 1] : null;
-			verts.push(...segmentToTriangles(seg, prevSeg));
+		for (const segment of segments) {
+			const connectedSegment = connections.get(segment);
+			verts.push(...segmentToTriangles(segment, connectedSegment));
 		}
 	}
+	
 	return { trunk: new Float32Array(verts), leaves: new Float32Array([]) };
 }
 
