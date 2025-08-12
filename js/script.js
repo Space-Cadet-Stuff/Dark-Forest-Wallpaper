@@ -222,13 +222,14 @@ class TreeNode {
 			const progress = i / numSegments;
 			const angleVariation = (Math.random() - 0.5) * 0.3;
 			currentAngle += angleVariation;
-			let thicknessTaper;
-			if (this.type === 0 && i === 0) {
-				thicknessTaper = 1.5;
-			} else {
-				thicknessTaper = 1 - (progress * 0.7);
-			}
-			const segmentThickness = this.thickness * thicknessTaper;
+	       let thicknessTaper;
+	       let trunkThickFactor = 2.2;
+	       if (this.type === 0) {
+		       thicknessTaper = trunkThickFactor * (1 - (progress * 0.7));
+	       } else {
+		       thicknessTaper = 1 - (progress * 0.7);
+	       }
+	       const segmentThickness = this.thickness * thicknessTaper;
 			const endX = currentX + Math.cos(currentAngle) * segmentLength;
 			const endY = currentY + Math.sin(currentAngle) * segmentLength;
 			this.segments.push({
@@ -306,23 +307,50 @@ class TreeNode {
 	}
 }
 
-function segmentToTriangles(segment) {
+function segmentToTriangles(segment, prevSegment = null) {
 	const triangles = [];
 	const { startX, startY, endX, endY, thickness } = segment;
 	const dx = endX - startX;
 	const dy = endY - startY;
 	const length = Math.sqrt(dx * dx + dy * dy);
 	if (length === 0) return triangles;
+	
 	const perpX = -dy / length * thickness / 2;
 	const perpY = dx / length * thickness / 2;
+	
+	let startLeftX = startX + perpX;
+	let startLeftY = startY + perpY;
+	let startRightX = startX - perpX;
+	let startRightY = startY - perpY;
+	
+	if (prevSegment) {
+		const prevDx = prevSegment.endX - prevSegment.startX;
+		const prevDy = prevSegment.endY - prevSegment.startY;
+		const prevLength = Math.sqrt(prevDx * prevDx + prevDy * prevDy);
+		if (prevLength > 0) {
+			const prevPerpX = -prevDy / prevLength * prevSegment.thickness / 2;
+			const prevPerpY = prevDx / prevLength * prevSegment.thickness / 2;
+			startLeftX = prevSegment.endX + prevPerpX;
+			startLeftY = prevSegment.endY + prevPerpY;
+			startRightX = prevSegment.endX - prevPerpX;
+			startRightY = prevSegment.endY - prevPerpY;
+		}
+	}
+	
+	const endLeftX = endX + perpX;
+	const endLeftY = endY + perpY;
+	const endRightX = endX - perpX;
+	const endRightY = endY - perpY;
+	
 	const vertices = [
-		startX + perpX, startY + perpY,
-		startX - perpX, startY - perpY,
-		endX + perpX, endY + perpY,
-		startX - perpX, startY - perpY,
-		endX - perpX, endY - perpY,
-		endX + perpX, endY + perpY
+		startLeftX, startLeftY,
+		startRightX, startRightY,
+		endLeftX, endLeftY,
+		startRightX, startRightY,
+		endRightX, endRightY,
+		endLeftX, endLeftY
 	];
+	
 	triangles.push(...vertices);
 	return triangles;
 }
@@ -347,38 +375,41 @@ function generateTreeRow(rowConfig, time, parallaxX) {
 		const tree = new TreeNode(baseX, baseY, angle, length, thickness, depth, 0);
 		tree.grow();
 		const segments = tree.getAllSegments();
-		for (const seg of segments) {
-			verts.push(...segmentToTriangles(seg));
+
+		for (let j = 0; j < segments.length; j++) {
+			const seg = segments[j];
+			const prevSeg = j > 0 ? segments[j - 1] : null;
+			verts.push(...segmentToTriangles(seg, prevSeg));
 		}
 	}
 	return { trunk: new Float32Array(verts), leaves: new Float32Array([]) };
 }
 
 const treeLayers = [
-	{
-		count: 21,
-		yBase: canvas.height - 30,
-		heightScale: 0.38,
-		thicknessScale: 0.7,
-		color: [0.38, 0.38, 0.41, 1.0],
-		parallaxStrength: 0.001
-	},
-	{
-		count: 14,
-		yBase: canvas.height - 20,
-		heightScale: 0.48,
-		thicknessScale: 1.25,
-		color: [0.16, 0.16, 0.18, 1.0],
-		parallaxStrength: 0.003
-	},
-	{
-		count: 7,
-		yBase: canvas.height - 10,
-		heightScale: 0.60,
-		thicknessScale: 1.6,
-		color: [0, 0, 0, 1],
-		parallaxStrength: 0.007
-	}
+       {
+	       count: 21,
+	       yBase: canvas.height - 30,
+	       heightScale: 0.38,
+	       thicknessScale: 1.2,
+	       color: [0.38, 0.38, 0.41, 1.0],
+	       parallaxStrength: 0.001
+       },
+       {
+	       count: 14,
+	       yBase: canvas.height - 20,
+	       heightScale: 0.48,
+	       thicknessScale: 2.2,
+	       color: [0.16, 0.16, 0.18, 1.0],
+	       parallaxStrength: 0.003
+       },
+       {
+	       count: 7,
+	       yBase: canvas.height - 10,
+	       heightScale: 0.60,
+	       thicknessScale: 2.8,
+	       color: [0, 0, 0, 1],
+	       parallaxStrength: 0.007
+       }
 ];
 
 let treeVBOs = [null, null, null];
