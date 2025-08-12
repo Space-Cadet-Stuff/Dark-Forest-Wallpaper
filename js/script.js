@@ -356,7 +356,7 @@ function generateTreeRow(rowConfig, time, parallaxX) {
 
 const treeLayers = [
 	{
-		count: 9,
+		count: 21,
 		yBase: canvas.height - 30,
 		heightScale: 0.38,
 		thicknessScale: 0.7,
@@ -364,7 +364,7 @@ const treeLayers = [
 		parallaxStrength: 0.001
 	},
 	{
-		count: 8,
+		count: 14,
 		yBase: canvas.height - 20,
 		heightScale: 0.48,
 		thicknessScale: 1.25,
@@ -562,9 +562,7 @@ function drawFlickerLight(time) {
 	const aPos = gl.getAttribLocation(lightProg, 'aPos');
 	gl.enableVertexAttribArray(aPos);
 	gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
-	// Make the interval between flickers longer (slower slow component)
 	let slow = Math.sin(time * 0.001 + Math.sin(time * 0.003));
-	// Make the flickers themselves 3x as fast (faster fast component)
 	let fast = Math.sin(time * 0.135 + Math.sin(time * 0.27));
 	let flicker = Math.abs(slow) * 0.7 + 0.3 * fast * Math.abs(slow);
 	flicker = Math.max(0.0, Math.min(1.0, flicker));
@@ -576,7 +574,6 @@ function drawFlickerLight(time) {
 
 function drawScene(time = 0) {
 	gl.viewport(0, 0, canvas.width, canvas.height);
-	// Darken the background, but keep it lighter than the lightest tree ([0.38, 0.38, 0.41])
 	gl.clearColor(0.55, 0.55, 0.6, 1.0);
 	gl.clear(gl.COLOR_BUFFER_BIT);
 	drawFlickerLight(time);
