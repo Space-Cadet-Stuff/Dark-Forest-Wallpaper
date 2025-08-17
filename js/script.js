@@ -1,4 +1,3 @@
-
 const canvas = document.createElement('canvas');
 canvas.id = 'limbo-bg';
 canvas.style.position = 'fixed';
@@ -210,7 +209,6 @@ class TreeNode {
 		this.type = type;
 		this.children = [];
 		this.segments = [];
-		this.leaves = [];
 	}
 	grow() {
 		const numSegments = Math.max(3, Math.floor(this.length / 20));
@@ -240,26 +238,6 @@ class TreeNode {
 				thickness: segmentThickness,
 				type: this.type
 			});
-			if (this.type === 1 && Math.random() < 0.18 && this.depth <= 2) {
-				const clusterCount = 2 + Math.floor(Math.random() * 3);
-				for (let c = 0; c < clusterCount; c++) {
-					const leafAngle = currentAngle + (Math.random() - 0.5) * 0.9;
-					const leafLen = 10 + Math.random() * 10;
-					const leafWidth = 4 + Math.random() * 4;
-					const dist = (Math.random() - 0.5) * 28 + (Math.random() < 0.5 ? 10 : -10);
-					const lx = endX + Math.cos(leafAngle) * dist;
-					const ly = endY + Math.sin(leafAngle) * dist;
-					const shapeType = Math.floor(Math.random() * 3);
-					this.leaves.push({
-						x: lx,
-						y: ly,
-						angle: leafAngle,
-						len: leafLen,
-						width: leafWidth,
-						shape: shapeType
-					});
-				}
-			}
 			currentX = endX;
 			currentY = endY;
 		}
@@ -297,13 +275,6 @@ class TreeNode {
 			allSegments = allSegments.concat(child.getAllSegments());
 		}
 		return allSegments;
-	}
-	getAllLeaves() {
-		let allLeaves = [...this.leaves];
-		for (const child of this.children) {
-			allLeaves = allLeaves.concat(child.getAllLeaves());
-		}
-		return allLeaves;
 	}
 }
 
@@ -382,12 +353,11 @@ function processTreeSegments(tree) {
 	return { segments: allSegments, connections: segmentConnections };
 }
 
-function generateTreeRow(rowConfig, time, parallaxX) {
+function generateTreeRow(rowConfig, parallaxX) {
 	const { count, yBase, heightScale, thicknessScale, color, parallaxStrength } = rowConfig;
 	const canvasWidth = canvas.width;
 	const canvasHeight = canvas.height;
 	const verts = [];
-	const leafVerts = [];
 	const edgePad = 0.18;
 	
 	for (let i = 0; i < count; i++) {
@@ -495,7 +465,7 @@ let treeParams = [];
 let treeParamsMed = [];
 let treeParamsLight = [];
 
-function getTreeParams(count, yBase, heightScale = 1, widthScale = 1, branchScale = 1, phaseOffset = 0) {
+function getTreeParams(count, yBase, heightScale = 1, widthScale = 1, phaseOffset = 0) {
 	const params = [];
 	const screenWidth = 2;
 	const spacing = screenWidth / count;
@@ -504,7 +474,6 @@ function getTreeParams(count, yBase, heightScale = 1, widthScale = 1, branchScal
 		const baseX = -1 + (i + 0.5) * spacing + (Math.random() - 0.5) * spacing * 0.3;
 		const height = (4.0 + Math.random() * 1.0) * heightScale;
 		const baseWidth = (0.04 + Math.random() * 0.06) * widthScale;
-		const branchCount = 3 + Math.floor(Math.random() * 5);
 		const swayPhase = Math.random() * Math.PI * 2 + phaseOffset;
 		const segments = 8 + Math.floor(Math.random() * 6);
 		const trunkSegments = [];
@@ -515,10 +484,6 @@ function getTreeParams(count, yBase, heightScale = 1, widthScale = 1, branchScal
 			trunkSegments.push({ height: segmentHeight, angle: segmentAngle, offset: segmentOffset });
 		}
 		const branches = [];
-		const isForeground = heightScale === 1.0;
-		const baseHeight = isForeground ? 0.2 : 0.4;
-		const heightRange = isForeground ? 0.3 : 0.5;
-		const halfBranchCount = Math.floor(branchCount / 2);
 		params.push({ baseX, yBase, height, baseWidth, trunkSegments, branches, swayPhase });
 	}
 	return params;
@@ -527,7 +492,7 @@ function getTreeParams(count, yBase, heightScale = 1, widthScale = 1, branchScal
 function buildTreeVerts(params, time = 0) {
 	const verts = [];
 	for (let i = 0; i < params.length; i++) {
-		const { baseX, yBase, height, baseWidth, trunkSegments, branches, swayPhase } = params[i];
+		const { baseX, yBase, height, baseWidth, trunkSegments, swayPhase } = params[i];
 		const sway = Math.sin(time * 0.2 + swayPhase + baseX * 1.5) * 0.015;
 		for (let s = 0; s < trunkSegments.length - 1; s++) {
 			const seg1 = trunkSegments[s];
