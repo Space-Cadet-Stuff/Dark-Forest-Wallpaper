@@ -244,14 +244,14 @@ class TreeNode {
 	createBranches(x, y, parentAngle) {
 		let numBranches, branchAngleSpread, branchLengthMultiplier, branchThicknessMultiplier;
 		if (this.type === 0) {
-			numBranches = Math.floor(2 + Math.random() * 4);
-			branchAngleSpread = Math.PI * 0.6;
+			numBranches = Math.floor(3 + Math.random() * 4); // More main branches
+			branchAngleSpread = Math.PI * 0.7; // Wider spread
 			branchLengthMultiplier = 0.6 + Math.random() * 0.3;
 			branchThicknessMultiplier = 0.5 + Math.random() * 0.2;
 		} else {
-			numBranches = Math.floor(1 + Math.random() * 3);
-			branchAngleSpread = Math.PI * 0.4;
-			branchLengthMultiplier = 0.5 + Math.random() * 0.2;
+			numBranches = Math.floor(2 + Math.random() * 3); // More sub-branches
+			branchAngleSpread = Math.PI * 0.5; // Wider spread
+			branchLengthMultiplier = 0.5 + Math.random() * 0.25;
 			branchThicknessMultiplier = 0.4 + Math.random() * 0.2;
 		}
 		for (let i = 0; i < numBranches; i++) {
@@ -271,6 +271,25 @@ class TreeNode {
 			allSegments = allSegments.concat(child.getAllSegments());
 		}
 		return allSegments;
+	}
+	
+	getBranchTips() {
+		let tips = [];
+		// If this node has no children and has segments, it's a branch tip
+		if (this.children.length === 0 && this.segments.length > 0) {
+			const lastSegment = this.segments[this.segments.length - 1];
+			tips.push({
+				x: lastSegment.endX,
+				y: lastSegment.endY,
+				depth: this.depth,
+				type: this.type
+			});
+		}
+		// Get tips from all children
+		for (const child of this.children) {
+			tips = tips.concat(child.getBranchTips());
+		}
+		return tips;
 	}
 }
 
@@ -349,11 +368,138 @@ function processTreeSegments(tree) {
 	return { segments: allSegments, connections: segmentConnections };
 }
 
+function generateLeafClusters(branchTips, parallaxX = 0) {
+	const leafVerts = [];
+	const leafShapes = ['circle', 'square', 'pentagon', 'triangle', 'hexagon'];
+	
+	for (const tip of branchTips) {
+		// Generate 4-8 leaf clusters per branch tip (increased)
+		const numClusters = 4 + Math.floor(Math.random() * 5);
+		
+		for (let i = 0; i < numClusters; i++) {
+			// Larger radius for puffier clusters
+			const radius = 30 + Math.random() * 25;
+			const angle = Math.random() * Math.PI * 2;
+			const offsetX = Math.cos(angle) * radius;
+			const offsetY = Math.sin(angle) * radius;
+			
+			// Add vertical layering to connect to trees
+			const verticalLayer = Math.floor(i / 2) * 15; // Stack leaves vertically
+			
+			const leafX = tip.x + offsetX + parallaxX;
+			const leafY = tip.y + offsetY - verticalLayer; // Subtract to go upward
+			
+			// Clamp coordinates to canvas bounds to prevent stretching
+			const clampedX = Math.max(-canvas.width * 0.2, Math.min(canvas.width * 1.2, leafX));
+			const clampedY = Math.max(-canvas.height * 0.2, Math.min(canvas.height * 1.2, leafY));
+			
+			// Random shape and size
+			const shape = leafShapes[Math.floor(Math.random() * leafShapes.length)];
+			const size = 3 + Math.random() * 5;
+			
+			// Generate vertices for the leaf shape
+			const shapeVerts = generateLeafShape(clampedX, clampedY, size, shape);
+			leafVerts.push(...shapeVerts);
+		}
+	}
+	
+	return new Float32Array(leafVerts);
+}
+
+function generateLeafShape(x, y, size, shape) {
+	const verts = [];
+	
+	switch (shape) {
+		case 'circle':
+			return generateCircleLeaf(x, y, size);
+		case 'square':
+			return generateSquareLeaf(x, y, size);
+		case 'pentagon':
+			return generatePolygonLeaf(x, y, size, 5);
+		case 'triangle':
+			return generatePolygonLeaf(x, y, size, 3);
+		case 'hexagon':
+			return generatePolygonLeaf(x, y, size, 6);
+		default:
+			return generateCircleLeaf(x, y, size);
+	}
+}
+
+function generateCircleLeaf(x, y, size) {
+	const verts = [];
+	const segments = 8;
+	
+	// Validate inputs
+	if (!isFinite(x) || !isFinite(y) || !isFinite(size) || size <= 0) {
+		return [];
+	}
+	
+	// Generate triangle fan for circle
+	for (let i = 0; i < segments; i++) {
+		const angle1 = (i / segments) * Math.PI * 2;
+		const angle2 = ((i + 1) / segments) * Math.PI * 2;
+		
+		const x1 = x + Math.cos(angle1) * size;
+		const y1 = y + Math.sin(angle1) * size;
+		const x2 = x + Math.cos(angle2) * size;
+		const y2 = y + Math.sin(angle2) * size;
+		
+		verts.push(x, y, x1, y1, x2, y2);
+	}
+	
+	return verts;
+}
+
+function generateSquareLeaf(x, y, size) {
+	// Validate inputs
+	if (!isFinite(x) || !isFinite(y) || !isFinite(size) || size <= 0) {
+		return [];
+	}
+	
+	const half = size;
+	return [
+		// Triangle 1
+		x - half, y - half,
+		x + half, y - half,
+		x - half, y + half,
+		// Triangle 2
+		x + half, y - half,
+		x + half, y + half,
+		x - half, y + half
+	];
+}
+
+function generatePolygonLeaf(x, y, size, sides) {
+	const verts = [];
+	
+	// Validate inputs
+	if (!isFinite(x) || !isFinite(y) || !isFinite(size) || size <= 0 || sides < 3) {
+		return [];
+	}
+	
+	// Generate triangle fan
+	for (let i = 0; i < sides; i++) {
+		const angle1 = (i / sides) * Math.PI * 2;
+		const angle2 = ((i + 1) / sides) * Math.PI * 2;
+		
+		const x1 = x + Math.cos(angle1) * size;
+		const y1 = y + Math.sin(angle1) * size;
+		const x2 = x + Math.cos(angle2) * size;
+		const y2 = y + Math.sin(angle2) * size;
+		
+		// Triangle: center, point1, point2
+		verts.push(x, y, x1, y1, x2, y2);
+	}
+	
+	return verts;
+}
+
 function generateTreeRow(rowConfig, parallaxX) {
-	const { count, yBase, heightScale, thicknessScale, color, parallaxStrength } = rowConfig;
+	const { count, yBase, heightScale, thicknessScale } = rowConfig;
 	const canvasWidth = canvas.width;
 	const canvasHeight = canvas.height;
 	const verts = [];
+	const leafVerts = [];
 	const edgePad = 0.18;
 	
 	for (let i = 0; i < count; i++) {
@@ -376,9 +522,14 @@ function generateTreeRow(rowConfig, parallaxX) {
 			const connectedSegment = connections.get(segment);
 			verts.push(...segmentToTriangles(segment, connectedSegment));
 		}
+		
+		// Generate leaves for this tree
+		const branchTips = tree.getBranchTips();
+		const treeLeafVerts = generateLeafClusters(branchTips, 0);
+		leafVerts.push(...treeLeafVerts);
 	}
 	
-	return { trunk: new Float32Array(verts), leaves: new Float32Array([]) };
+	return { trunk: new Float32Array(verts), leaves: new Float32Array(leafVerts) };
 }
 
 const treeLayers = [
@@ -388,6 +539,7 @@ const treeLayers = [
 	       heightScale: 0.38,
 	       thicknessScale: 1.2,
 	       color: [0.38, 0.38, 0.41, 1.0],
+	       leafColor: [0.45, 0.45, 0.48, 1.0],
 	       parallaxStrength: 0.001
        },
        {
@@ -396,6 +548,7 @@ const treeLayers = [
 	       heightScale: 0.48,
 	       thicknessScale: 2.2,
 	       color: [0.16, 0.16, 0.18, 1.0],
+	       leafColor: [0.22, 0.22, 0.24, 1.0],
 	       parallaxStrength: 0.003
        },
        {
@@ -404,23 +557,29 @@ const treeLayers = [
 	       heightScale: 0.60,
 	       thicknessScale: 2.8,
 	       color: [0, 0, 0, 1],
+	       leafColor: [0.05, 0.05, 0.05, 1.0],
 	       parallaxStrength: 0.007
        }
 ];
 
 let treeVBOs = [null, null, null];
 let treeVertsArr = [null, null, null];
+let leafVBOs = [null, null, null];
+let leafVertsArr = [null, null, null];
 
 const treeProg = createProgram(gl, treeVsSource, treeFsSource);
 
 let treeBaseVertsArr = [null, null, null];
+let leafBaseVertsArr = [null, null, null];
 
 function updateTreeLayers(time) {
 	for (let i = 0; i < treeLayers.length; i++) {
 		const layer = treeLayers[i];
 		const row = generateTreeRow(layer, time, 0);
 		treeBaseVertsArr[i] = row.trunk;
+		leafBaseVertsArr[i] = row.leaves;
 		if (!treeVBOs[i]) treeVBOs[i] = gl.createBuffer();
+		if (!leafVBOs[i]) leafVBOs[i] = gl.createBuffer();
 	}
 	updateTreeParallaxVBOs();
 }
@@ -429,9 +588,12 @@ function updateTreeParallaxVBOs() {
 	for (let i = 0; i < treeLayers.length; i++) {
 		const layer = treeLayers[i];
 		const baseVerts = treeBaseVertsArr[i];
+		const baseLeafVerts = leafBaseVertsArr[i];
+		const offsetX = mouseX * canvas.width * layer.parallaxStrength;
+		
+		// Update tree trunk vertices
 		if (baseVerts) {
 			const verts = new Float32Array(baseVerts.length);
-			const offsetX = mouseX * canvas.width * layer.parallaxStrength;
 			for (let j = 0; j < baseVerts.length; j += 2) {
 				verts[j] = baseVerts[j] + offsetX;
 				verts[j+1] = baseVerts[j+1];
@@ -439,6 +601,26 @@ function updateTreeParallaxVBOs() {
 			treeVertsArr[i] = verts;
 			gl.bindBuffer(gl.ARRAY_BUFFER, treeVBOs[i]);
 			gl.bufferData(gl.ARRAY_BUFFER, verts, gl.DYNAMIC_DRAW);
+		}
+		
+		// Update leaf vertices with parallax and subtle sway
+		if (baseLeafVerts && baseLeafVerts.length > 0) {
+			const leafVerts = new Float32Array(baseLeafVerts.length);
+			const swayAmount = Math.sin(Date.now() * 0.001) * 1; // Gentle sway
+			for (let j = 0; j < baseLeafVerts.length; j += 2) {
+				// Validate coordinates and apply transformations
+				if (isFinite(baseLeafVerts[j]) && isFinite(baseLeafVerts[j+1])) {
+					leafVerts[j] = baseLeafVerts[j] + offsetX + swayAmount;
+					leafVerts[j+1] = baseLeafVerts[j+1];
+				} else {
+					// Skip invalid coordinates
+					leafVerts[j] = 0;
+					leafVerts[j+1] = 0;
+				}
+			}
+			leafVertsArr[i] = leafVerts;
+			gl.bindBuffer(gl.ARRAY_BUFFER, leafVBOs[i]);
+			gl.bufferData(gl.ARRAY_BUFFER, leafVerts, gl.DYNAMIC_DRAW);
 		}
 	}
 }
@@ -457,93 +639,21 @@ function drawTreeLayer(i) {
 		gl.drawArrays(gl.TRIANGLES, 0, verts.length / 2);
 	}
 }
-let treeParams = [];
-let treeParamsMed = [];
-let treeParamsLight = [];
 
-function getTreeParams(count, yBase, heightScale = 1, widthScale = 1, phaseOffset = 0) {
-	const params = [];
-	const screenWidth = 2;
-	const spacing = screenWidth / count;
-	
-	for (let i = 0; i < count; i++) {
-		const baseX = -1 + (i + 0.5) * spacing + (Math.random() - 0.5) * spacing * 0.3;
-		const height = (4.0 + Math.random() * 1.0) * heightScale;
-		const baseWidth = (0.04 + Math.random() * 0.06) * widthScale;
-		const swayPhase = Math.random() * Math.PI * 2 + phaseOffset;
-		const segments = 8 + Math.floor(Math.random() * 6);
-		const trunkSegments = [];
-		for (let s = 0; s <= segments; s++) {
-			const segmentHeight = s / segments;
-			const segmentAngle = (Math.random() - 0.5) * 0.15;
-			const segmentOffset = (Math.random() - 0.5) * 0.02;
-			trunkSegments.push({ height: segmentHeight, angle: segmentAngle, offset: segmentOffset });
-		}
-		const branches = [];
-		params.push({ baseX, yBase, height, baseWidth, trunkSegments, branches, swayPhase });
+function drawLeafLayer(i) {
+	const leafVerts = leafVertsArr[i];
+	if (leafVerts && leafVerts.length > 0) {
+		gl.useProgram(treeProg);
+		const a_position = gl.getAttribLocation(treeProg, 'a_position');
+		gl.bindBuffer(gl.ARRAY_BUFFER, leafVBOs[i]);
+		gl.enableVertexAttribArray(a_position);
+		gl.vertexAttribPointer(a_position, 2, gl.FLOAT, false, 0, 0);
+		gl.uniform2f(gl.getUniformLocation(treeProg, 'u_resolution'), canvas.width, canvas.height);
+		gl.uniform1f(gl.getUniformLocation(treeProg, 'u_time'), 0);
+		gl.uniform4f(gl.getUniformLocation(treeProg, 'uColor'), ...treeLayers[i].leafColor);
+		gl.drawArrays(gl.TRIANGLES, 0, leafVerts.length / 2);
 	}
-	return params;
 }
-
-function buildTreeVerts(params, time = 0) {
-	const verts = [];
-	for (let i = 0; i < params.length; i++) {
-		const { baseX, yBase, height, baseWidth, trunkSegments, swayPhase } = params[i];
-		const sway = Math.sin(time * 0.2 + swayPhase + baseX * 1.5) * 0.015;
-		for (let s = 0; s < trunkSegments.length - 1; s++) {
-			const seg1 = trunkSegments[s];
-			const seg2 = trunkSegments[s + 1];
-			const y1 = yBase + height * seg1.height;
-			const y2 = yBase + height * seg2.height;
-			let taper1, taper2;
-			if (seg1.height < 0.3) {
-				const flareAmount = (0.3 - seg1.height) / 0.3;
-				taper1 = 1.0 + flareAmount * 0.3;
-			} else {
-				taper1 = 1.0 - (seg1.height - 0.3) * 0.6;
-			}
-			if (seg2.height < 0.3) {
-				const flareAmount = (0.3 - seg2.height) / 0.3;
-				taper2 = 1.0 + flareAmount * 0.3;
-			} else {
-				taper2 = 1.0 - (seg2.height - 0.3) * 0.6;
-			}
-			const swayAmount1 = sway * seg1.height;
-			const swayAmount2 = sway * seg2.height;
-			const centerX1 = baseX + swayAmount1 + seg1.offset;
-			const centerX2 = baseX + swayAmount2 + seg2.offset;
-			const width1 = baseWidth * taper1;
-			const width2 = baseWidth * taper2;
-			const angle1 = seg1.angle;
-			const angle2 = seg2.angle;
-			const leftX1 = centerX1 - width1 * Math.cos(angle1) - width1 * Math.sin(angle1) * 0.1;
-			const rightX1 = centerX1 + width1 * Math.cos(angle1) + width1 * Math.sin(angle1) * 0.1;
-			const leftX2 = centerX2 - width2 * Math.cos(angle2) - width2 * Math.sin(angle2) * 0.1;
-			const rightX2 = centerX2 + width2 * Math.cos(angle2) + width2 * Math.sin(angle2) * 0.1;
-			verts.push(leftX1, y1, rightX1, y1, leftX2, y2);
-			verts.push(rightX1, y1, rightX2, y2, leftX2, y2);
-		}
-	}
-	return new Float32Array(verts);
-}
-
-treeParams = getTreeParams(4, grassYBase, 1.0, 1.0, 1.0, 0);
-let treeVerts = buildTreeVerts(treeParams, 0);
-const treeVBO = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, treeVBO);
-gl.bufferData(gl.ARRAY_BUFFER, treeVerts, gl.STATIC_DRAW);
-
-treeParamsMed = getTreeParams(6, grassYBase, 0.8, 0.9, 0.8, 1.5);
-let treeVertsMed = buildTreeVerts(treeParamsMed, 0);
-const treeVBOMed = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, treeVBOMed);
-gl.bufferData(gl.ARRAY_BUFFER, treeVertsMed, gl.STATIC_DRAW);
-
-treeParamsLight = getTreeParams(5, grassYBase, 0.6, 0.8, 0.6, 3.0);
-let treeVertsLight = buildTreeVerts(treeParamsLight, 0);
-const treeVBOLight = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, treeVBOLight);
-gl.bufferData(gl.ARRAY_BUFFER, grassVertsLight, gl.STATIC_DRAW);
 
 let mouseX = 0;
 let mouseY = 0;
@@ -602,6 +712,7 @@ function drawScene(time = 0) {
 	updateTreeParallaxVBOs();
 	for (let i = 0; i < treeLayers.length; i++) {
 		drawTreeLayer(i);
+		drawLeafLayer(i);
 	}
 	drawGrassLayer(grassParamsLight, grassVBOLight, [0.12, 0.12, 0.15, 1.0], time * 0.001, 0.002);
 	drawGrassLayer(grassParamsMed, grassVBOMed, [0.08, 0.08, 0.10, 1.0], time * 0.001, 0.005);
@@ -808,18 +919,15 @@ function drawRain() {
 	rainCtx.clearRect(0, 0, rainCanvas.width, rainCanvas.height);
 	rainCtx.save();
 	rainCtx.strokeStyle = 'rgba(255,255,255,0.85)';
-	// Use the top of the black bar (ground) at NDC y = -0.9
 	const groundNDC = -0.9;
 	const groundY = Math.round(canvas.height * (1 - ((groundNDC + 1) / 2)));
 	for (let drop of raindrops) {
 		rainCtx.beginPath();
 		rainCtx.lineWidth = drop.width;
-		// Calculate rain angle from velocity
 		const angle = Math.atan2(drop.speed, drop.wind);
 		const len = drop.len;
 		let x2 = drop.x + Math.cos(angle) * len;
 		let y2 = drop.y + Math.sin(angle) * len;
-		// If the drop would extend past the ground, clip it
 		if (y2 > groundY) {
 			let t = (groundY - drop.y) / (y2 - drop.y);
 			x2 = drop.x + (x2 - drop.x) * t;
